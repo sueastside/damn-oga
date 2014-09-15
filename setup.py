@@ -11,7 +11,7 @@ config = {
     'author_email': 'No, thanks',
     'version': '0.1',
     'test_suite': 'tests.suite',
-    'install_requires': ['django', 'celery'],
+    'install_requires': ['django', 'damn_celery'],
     'test_requires': [],
     'packages': ['damn_oga'],
     'scripts': [],
