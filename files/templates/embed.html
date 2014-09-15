@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% load staticfiles %}
+
+{% load metadatavalue %}
+
+{% block title %}DAMN{% endblock %}
+
+{% block content %}
+ <style>
+    * {margin: 0; padding: 0;}
+    #carousel-assets .item, .carousel.slide img {
+        width: 256px; height: 256px;
+    }
+    #carousel-assets .carousel-caption {
+        padding-bottom: 0px;
+    }
+</style>
+
+<div class="row">  
+ 
+    <div class="col-md-2">
+        <ul class="partners">
+            {% for asset, previews in assets.items %}
+                <li data-target="#carousel-assets" data-slide-to="{{forloop.counter0}}">
+                    {{ asset.asset.subname }} ({{ asset.asset.mimetype }})
+                </li>
+            {% endfor %}
+        </ul>
+     </div>
+
+    <div class="col-md-2">
+        <div id="carousel-assets" class="carousel slide" data-ride="carousel">
+          <!-- Wrapper for slides -->
+          <div class="carousel-inner">
+            {% for asset, previews in assets.items %}
+                <div class="item {%if forloop.first %} active {% endif%}"
+                    data-type="{{ asset.asset.mimetype }}"
+                    {% for key, val in asset.metadata.items %}
+                        data-{{ key }}="{{ val|metadatavalue }}"
+                    {% endfor %}
+                    >
+                  <img src="{% static previews.256x256.0 %}" alt="{{ asset.asset.subname }}">
+                  <div class="carousel-caption">
+                        {{ asset.asset.subname }}
+                  </div>
+                </div>
+            {% endfor %}
+          </div>
+
+          <!-- Controls -->
+          <a class="left carousel-control" href="#carousel-assets" data-slide="prev">
+            <span class="glyphicon glyphicon-chevron-left"></span>
+          </a>
+          <a class="right carousel-control" href="#carousel-assets" data-slide="next">
+            <span class="glyphicon glyphicon-chevron-right"></span>
+          </a>
+        </div>
+        <div class="asset metadata"></div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    $(document).ready(function () {
+        
+        $('#carousel-assets').on('slid.bs.carousel', function () {
+            var active= $("#carousel-assets .carousel-inner .item.active");
+            var buffer = "<ul>";
+            $.each(active.data(), function (key, value) {
+                buffer += "<li>"+key + ": "+ value+"</li>";
+            });
+            buffer += "</ul>";
+            $(".asset.metadata").html(buffer);
+        });
+        
+        $('#carousel-assets').trigger('slid.bs.carousel');
+        
+    });
+</script>
+{% endblock %}

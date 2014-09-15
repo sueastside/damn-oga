@@ -1,0 +1,238 @@
+{% extends "base.html" %}
+
+{% load staticfiles %}
+
+{% block title %}DAMN{% endblock %}
+
+{% block content %}
+<style>
+    
+#progress { height: 100px; }
+</style>
+
+
+<div class="container">  
+    <div class="jumbotron">
+        <h1>DAMN</h1>
+        <p class="lead">Paste your OpenGameArt URL here</p>
+        <p>  <!--<span class="help-inline">Something may have gone wrong</span>-->
+            <input class="form-control" id="url" value="" /></p>
+        <p><button class="btn btn-lg btn-success" type="button" id="submit">Analyze</button></p>
+    </div>
+    <!--
+    <div class="row">  
+        <div class="col-lg-4">
+            <div class="input-group">
+              <input class="form-control" id="url" value="http://opengameart.org/content/fieldstone-fireplace" />
+              <span class="input-group-btn">
+                <button class="btn btn-primary" type="button" id="submit">Analyze</button>
+              </span>
+              <span class="input-group-btn">
+                  <button class="btn btn-default" id="reset">Reset</button>
+              </span>
+            </div>
+        </div>
+    </div>
+    -->
+    <div id="title" class="row">  
+        <div class="col-lg-10">
+            <h4></h4>
+        </div>
+        <div class="col-lg-1">
+             <button class="btn btn-default" type="button" id="clear">Clear</button>
+        </div>
+        <div class="col-lg-1">
+             <!--<button class="btn btn-default" type="button" id="reset">Reset</button>-->
+        </div>
+    </div>
+    <div id="progress" class="row">  
+        <div class="col-lg-12">
+            <div id="progressbar" class="progress"></div>
+        </div>
+    </div>
+
+    <div class="row">  
+        <div class="col-lg-6">
+            <ul id="assets1" class="media-list">
+            </ul>
+        </div>
+        <div class="col-lg-6">
+            <ul id="assets2" class="media-list">
+            </ul>
+        </div>
+    </div>
+
+</div>
+
+
+{% endblock %}
+
+{% block scripts %}
+<script> 
+TRANSCODING = {};
+TRANSCODED = {};
+TIMEOUT = null;
+
+var update = function (url) {
+    jQuery.getJSON('/analyze/?url='+url,  function (data, textStatus, jqXHR) {
+        //$('#progress').text(JSON.stringify(data, null, 4));
+        console.log('UPDATE');
+        
+        $('#assets1,#assets2').empty();
+        var nr_of_assets = 0;
+        var parent;
+        for (file_descr in data.completed) {
+            file_descr = data.completed[file_descr];
+            console.log(file_descr);
+            for (asset in file_descr.assets) {
+                asset = file_descr.assets[asset];
+                if (asset.asset.mimetype != 'application/x-blender.object-lamp' 
+                    && asset.asset.mimetype != 'application/x-blender.object-empty'
+                    && asset.asset.mimetype != 'application/x-blender.object-armature') {
+                    if (nr_of_assets%2==0) { parent = '#assets1'; } else { parent = '#assets2'; }
+                    render(url, asset, parent);
+                    nr_of_assets++;
+                }
+            }
+        }
+        
+        if (data.total == 0 && data.state == 'SUCCESS') {
+            $('#progressbar').progressbar('setPosition', 100);
+            $('#progressbar').progressbar('setWarningMarker', 0);
+        } else {
+            var progress = (data.current / data.total)*100.0;
+            $('#progressbar').progressbar('setPosition', progress);
+        }
+        
+        if (nr_of_assets == 0) {
+            $('#progressbar').progressbar('setPosition', 100);
+        } else {
+            var progress = (Object.keys(TRANSCODED).length / nr_of_assets)*100.0;
+            $('#progressbar').progressbar('setPosition', progress);
+        }
+        
+        if (data.state != 'SUCCESS' || Object.keys(TRANSCODING).length) {
+            TIMEOUT = setTimeout(function(){ update(url); }, 500);
+        }
+    }).fail(function(jqXHR, textStatus, errorThrown) {
+        
+        if (textStatus=='error') {
+            $('#title h4').text(jqXHR.responseText);
+        } else {
+            TIMEOUT = setTimeout(function(){ update(url); }, 500);
+        }
+        
+    });
+};
+
+
+var render = function (url, asset, parent) {
+    var template = $.templates("#theTmpl");
+    
+    var tr_url = '/transcode/?url='+url+'&'+$.param({hash:asset.asset.file.hash, subname:asset.asset.subname, mimetype:asset.asset.mimetype});
+    
+    var base_url = window.location.href.replace('http://', 'peragro://')
+    var co_url = base_url + tr_url.substring(1) + '&action=checkout'
+    
+    var dl_url = '/download/?url='+url+'&'+$.param({hash:asset.asset.file.hash});
+    
+    var item = {src:'unknown', heading:asset.asset.subname, description: asset.asset.mimetype, tr_url:tr_url, co_url:co_url, dl_url:dl_url};
+
+    var el = $('<li class="media" />');
+    
+   
+    if (TRANSCODED[tr_url]){
+        var preview_url = TRANSCODED[tr_url];
+        $.observable(item).setProperty("src", preview_url);
+        el.html(template.render(item));
+    } else {
+        TRANSCODING[tr_url] = null;
+        jQuery.getJSON(tr_url, function (data, textStatus, jqXHR) {
+            if (data.result['256x256']) {
+                TRANSCODED[tr_url] = '/static/'+data.result['256x256'][0];
+                delete TRANSCODING[tr_url];
+                $.observable(item).setProperty("src", TRANSCODED[tr_url]);
+                el.html(template.render(item));
+            } else if (data.state == 'SUCCESS' || data.state == 'FAILURE') {
+                $.observable(item).setProperty("status", data.result);
+                el.html(template.render(item));
+                TRANSCODED[tr_url] = 'unknown';
+                delete TRANSCODING[tr_url];
+            } else {
+                $.observable(item).setProperty("status", data.result);
+                el.html(template.render(item));
+            }
+        });
+    }
+
+    $(parent).append(el);
+};
+
+var analyze = function (url) {
+    if (url && url.trim() != '') {
+        update(url.trim());
+    }
+};
+
+
+$(document).ready(function () {
+    $.ajaxSetup({
+        // Disable caching of AJAX responses
+        cache: false
+    });
+    
+    $('#title,#progress').hide();
+
+    $('#submit').click(function () {
+        var value = $('#url').val();
+        console.log(value);
+        analyze(value);
+        TRANSCODING = {};
+        TRANSCODED = {};
+        $('.jumbotron').hide();
+        $('#title,#progress').show();
+         $('#title h4').text(value);
+    });
+    $('#reset').click(function () {
+        $.get('/reset/');
+        $('#clear').click();
+    });
+    
+    $('#clear').click(function () {
+        $('.jumbotron').show();
+        $('#title,#progress').hide();
+        $('#url').val('');
+        $('#assets1,#assets2').empty();
+        if (TIMEOUT) { 
+            clearTimeout(TIMEOUT); TIMEOUT = null; 
+        }
+    });
+    
+    $('#progressbar').progressbar({
+        warningMarker: 100,
+        dangerMarker: 100,
+        maximum: 100,
+        step: 1
+    });
+
+    //$('#submit').click();
+});
+</script>
+
+<script src="http://www.jsviews.com/download/jsviews.js"></script>
+<script id="theTmpl" type="text/x-jsrender">
+    <li class="media">
+        <a class="pull-left" href="#">
+          <img class="media-object" src="{^{:src}}" alt="..." style="width:64px; height:64px;">
+        </a>
+        <div class="media-body">
+          <h4 class="media-heading">{^{:heading}}</h4>
+            {^{:description}}<br />
+            {^{:status}}
+             <!--<a href="{^{:tr_url}}">transcode status</a>-->
+            <a href="{^{:co_url}}">checkout</a>
+            <!--<a href="{^{:dl_url}}">download</a>-->
+        </div>
+    </li>
+</script> 
+{% endblock %}
